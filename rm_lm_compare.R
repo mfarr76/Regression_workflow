@@ -69,9 +69,9 @@ stx_sm <- stx %>%
          YIELD_12M > 0) %>%
   mutate(Lbs_Ft = ProppantAmountTotal / PerfIntervalGross, 
          Bbl_Ft = (FluidAmountTotal / 42) / PerfIntervalGross,
-         Cum12Gas_MMcf = First12MonthGas / 1000,
-         Cum12_Mboe = (First12MonthLiquid + First12MonthGas / 6) / 1000,
-         category = as.factor(ifelse(Cum12Gas_MMcf > quantile(Cum12Gas_MMcf, p = 0.75), "High", "Low")))
+         CUM12Gas_MMcf = First12MonthGas / 1000,
+         CUM12_Mboe = (First12MonthLiquid + First12MonthGas / 6) / 1000,
+         category = as.factor(ifelse(CUM12_Mboe > quantile(CUM12_Mboe, p = 0.75), "High", "Low")))
 #  select(OperatorName, Lat, Lon, TOE_UP_DWN, Lbs_Ft, Bbl_Ft, Lbs_Ft, Bbl_Ft, TotalDepthTVD, 
 #         SoPhiH_LEF, Spacing_Avg, Vintage, Cum12Gas_MMcf, EffLat = PerfIntervalGross, category)
 #write.csv(stx_sm, file = "sm_stx.csv")
@@ -134,13 +134,13 @@ corrplot(correlate, method = "circle", type = "lower", sig.level = 0.01, insig =
 ##==========================================================================================
 
 ##formula -----
-sm_fmla <- Cum12_Mboe ~ PerfIntervalGross + TotalDepthTVD + SoPhiH_LEF + Spacing_Avg + 
+sm_fmla <- CUM12_Mboe ~ PerfIntervalGross + TotalDepthTVD + SoPhiH_LEF + Spacing_Avg + 
                 Bbl_Ft + Lbs_Ft + Max_Infill_Time + YIELD_12M
-
+fmla <- sm_fmla
 
 ##create test / train dataset
 set.seed(1234)
-trainRow <- createDataPartition(stx_sm$Cum12_Mboe, p = 0.8, list = FALSE)
+trainRow <- createDataPartition(stx_sm$CUM12_Mboe, p = 0.75, list = FALSE)
 train_sm <- stx_sm[trainRow, ]
 test_sm <- stx_sm[-trainRow, ]
 
