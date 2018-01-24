@@ -1,4 +1,3 @@
-
 rm(list = ls())
 # Parallel
 library('doSNOW')
@@ -6,7 +5,6 @@ library('doSNOW')
 # general visualisation
 library('ggplot2') # visualisation
 library('RColorBrewer') # visualisation
-library('corrplot') # visualisation
 library('grid') # visualisation
 
 # general data manipulation
@@ -24,6 +22,8 @@ library('lubridate') # date and time
 # Extra vis
 library('ggforce') # visualisation
 library('ggridges') # visualisation
+library('corrplot') # visualisation
+library('GGally')
 
 # Model
 library('caret')
@@ -32,8 +32,6 @@ library('randomForest')
 library('rpart')
 library('rpart.plot')
 library('broom')
-library('lars')
-library('glmnet')
 
 ##EagleFord Webb and Dimmit counties 
 ##Wellhead information in .csv file
@@ -44,6 +42,9 @@ stx <- read.csv("stxDataset.csv", header = TRUE)
 ##create column to convert to numeric
 factor_col <- c("API","OperatorName","WellName","CountyName","TOE_UP_DWN",
                 "Spacing_Category", "DateProductionStart")
+
+##too many NAs and missing values...easier to hard code factor column labels
+#factor_col <- colnames(select_if(webb_public, is.factor))
 ##create factor_col into factors
 stx[factor_col] <- lapply(stx[factor_col], as.factor)
 ##create a list of colnames to turn into numeric
@@ -131,6 +132,7 @@ stx_num <- stx_sm %>%
 
 correlate <- cor(stx_num, use = "everything")
 corrplot(correlate, method = "circle", type = "lower", sig.level = 0.01, insig = "blank")
+ggpairs(stx_num[,1:10])
 ##==========================================================================================
 
 ##formula -----
