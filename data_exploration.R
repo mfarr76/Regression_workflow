@@ -42,7 +42,7 @@ comb_webb %>%
   arrange(SoPhiH_LEF)
 
 
-expl_data(comb_webb, "CUM12_Mboe", "Lbs_Ft")
+expl_data(webb_public, "CUM12_Mboe", "Lbs_Ft")
 
 ##qq plots
 p1 <- qqpl(comb_webb, "sqrt_CUM12_Mboe")

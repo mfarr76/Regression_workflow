@@ -16,6 +16,7 @@ library('tibble') # data wrangling
 library('tidyr') # data wrangling
 library('stringr') # string manipulation
 library('forcats') # factor manipulation
+library('purrr') # data wrangling
 
 # Dates
 library('lubridate') # date and time
@@ -87,7 +88,6 @@ webb_public <- public %>%
          CUM12Gas_MMcf = First12MonthGas / 1000,
          TVD = TotalDepthTVD,
          Eff_Lat = PerfIntervalGross,
-         CUM12_Mboe_Ft = CUM12_Mboe / Eff_Lat,
          log_Lbs_Ft = log10(Lbs_Ft),
          log_Bbl_Ft = log10(Bbl_Ft),
          sqrt_Lbs_Ft = sqrt(Lbs_Ft), 
@@ -95,23 +95,33 @@ webb_public <- public %>%
          sqrt_CUM12_Mboe = sqrt(CUM12_Mboe),
          log_YIELD_12MO = log10(YIELD_12MO),
          sqrt_YIELD_12MO = sqrt(YIELD_12MO),
-         Mboe_Ft = CUM12_Mboe / PerfIntervalGross,
-         Mboe_Lbs_Bbl_ft2 = CUM12_Mboe / (Lbs_Ft * Bbl_Ft),
-         Lbs_Bbl_ft2 = Lbs_Ft * Bbl_Ft, 
-         Category = as.factor(ifelse(CUM12_Mboe > quantile(CUM12_Mboe, p = 0.75), "High", "Low"))) %>%
-  filter(YIELD_12MO >= 5, #& YIELD_12MO <= 50, 
+         Mboe_Ft = CUM12_Mboe / PerfIntervalGross) %>%
+         #Category = as.factor(ifelse(CUM12_Mboe > quantile(CUM12_Mboe, p = 0.75), "High", "Low"))) %>%
+  filter(YIELD_12MO >= 5 & YIELD_12MO <= 50, 
          CUM12_Mboe < 600, 
          Lbs_Ft < 4000) %>%
   droplevels()
 
 
 factor_col <- names(select_if(webb_public, is.factor))
-factor_l <- length(factor_col)
+#factor_l <- length(factor_col)
 
 webb_public <- webb_public %>% select(factor_col, everything())
 
-webb_public <- webb_public[, -grep('^Fi', names(webb_public))]
+##remove all columns that start with Fi
+webb_public <- webb_public[, -grep('^Fi', names(webb_public))] 
 
+##use sapply to get class of columns
+#tbl_names <- names(webb_public) %>% tbl_df() %>% 
+#  mutate(class = sapply(webb_public, class))
+
+##use purrr to get class of column
+tbl_names <- names(webb_public) %>% tbl_df() %>% 
+  mutate(class = map(webb_public, class))
+
+webb_public <- webb_public[-c(1:6, 13, 34)]
+
+ 
 #var <- names(webb_public)
 #not_target <- var[var != "CUM12_Mboe"]
 #length(var)
@@ -172,25 +182,53 @@ webb_public[,remove_cols] <- NULL
 #ggpairs(webb_lowcor[var])
 
 ##clustering================================================================================
+
 webb_num <- select_if(webb_public, is.numeric) %>%
   select(CUM12_Mboe, everything())
 
+tbl <- names(webb_num) %>% tbl_df()
+
 count_NA(webb_num)
 
+sum(sapply(webb_num, is.na))
+
+tbl <- names(webb_num) %>% tbl_df()
 ##remove columns that have any NA
 webb_num[sapply(webb_num, function(x) any(is.na(x)))] <- NULL
 
+##check if scaling is necessary
+##if means and sd of the feature vary then scaling is in order
+mean(colMeans(webb_num[-1]))
+mean(apply(webb_num[-1], 2, sd))
 
-webb_num[,"c.Max_Infill_Time"] <- NULL
-medians = apply(webb_num,2,median)
-mads = apply(webb_num,2,mad)
-webb_num_norm = scale(webb_num,center=medians,scale=mads)
+##will need to normalize the data because the data has different scales of measurement
+
+##produce a new matrix with columns of mean of 0 and sd of 1
+scale_webb <- scale(webb_num[-1])
+##check scale
+mean(colMeans(scale_webb))
+mean(apply(scale_webb, 2, sd))
+
+# Create hierarchical clustering model: hclust.out
+hclust.out <- hclust(d = dist(scale_webb[,17]), method = "complete")
+
+
+# Inspect the result
+summary(hclust.out)
+plot(hclust.out)
+abline(h = 0.75, col = "red")
+
+webb_public$clusters <- cutree(hclust.out, h = 0.75)
+
+table(webb_test$Eff_Lat, webb_test$clust)
+
+
 ##==============
 #https://nishanthu.github.io/articles/ClusteringUsingRandomForest.html
 
 webb_pc <- prcomp(webb_num[-1], center = FALSE, scale. = FALSE)$x %>% as.data.frame()
 
-km.cluster <- kmeans(webb_num[-1], centers = 3, iter.max = 20, nstart = 2)
+km.cluster <- kmeans(webb_num, centers = 3, iter.max = 20, nstart = 2)
 webb_pc$kmeans.cluster <- km.cluster$cluster
 table(webb_num$YIELD_12MO, km.cluster$cluster)
 
@@ -292,7 +330,7 @@ summary(step_back_Mod)
 summary(step_forward_Mod)
 
 ##formula============================================================================
-sm_fmla <- paste("sqrt(CUM12_Mboe) ~ Eff_Lat + TVD + SoPhiH_LEF + Spacing_Avg + Lbs_Ft +", 
+sm_fmla <- paste("Mboe_Ft ~ Eff_Lat + TVD + SoPhiH_LEF + Spacing_Avg + Lbs_Ft +", 
                  "Bbl_Ft + Lon + Lat + c.FirstProdYear + c.Max_Infill_Time +",
                   "API_Azimuth + OperatorName + Binned_YIELD_12MO")
 fmla <- as.formula(sm_fmla)
@@ -300,8 +338,6 @@ predictors <- c("Eff_Lat", "TVD", "SoPhiH_LEF", "Spacing_Avg","Lbs_Gal", "Lbs_Ft
                 "Lon", "Lat", "c.FirstProdYear", "c.Max_Infill_Time", "API_Azimuth", "log_YIELD_12MO", 
                 "Binned_YIELD_12MO")
 #train_pred <- webb_train[, !names(webb_train) %in% c("CUM12_Mboe")]
-
-
 
 ##test formula============================================================================
 ##
@@ -312,9 +348,9 @@ library('randomForest')
 
 mtry <- sqrt(ncol(webb_train[predictors]))
 set.seed(1234)
-rf <- randomForest(sqrt(CUM12_Mboe) ~ Eff_Lat + TVD + SoPhiH_LEF + Spacing_Avg +
-                     Lon + Lat + c.FirstProdYear + c.Max_Infill_Time + Lbs_Ft + Bbl_Ft +
-                     API_Azimuth + OperatorName + Binned_YIELD_12MO, 
+rf <- randomForest(sqrt(CUM12_Mboe) ~ Eff_Lat + TVD + SoPhiH_LEF + Spacing_Avg + 
+                     Lbs_Ft + Bbl_Ft + Lon + Lat + c.FirstProdYear + c.Max_Infill_Time + 
+                     API_Azimuth, 
                    webb_train, mtry = mtry, ntree = 1000)
 pred_rf <- (predict(rf, webb_test))^2
 (MAE(pred_rf, webb_test$CUM12_Mboe))
@@ -358,7 +394,7 @@ pred_knn <- (predict(knnfit, webb_test))^2
 set.seed(1234)
 webb_boost = gbm(sqrt(CUM12_Mboe) ~ Eff_Lat + TVD + SoPhiH_LEF + Spacing_Avg +
                    Lon + Lat + c.FirstProdYear + c.Max_Infill_Time + Lbs_Gal +Lbs_Ft + Bbl_Ft +
-                   API_Azimuth + OperatorName + Binned_YIELD_12MO,
+                   API_Azimuth + OperatorName + clusters,
                  data = webb_train, distribution = "gaussian", 
                  n.trees = 5000, interaction.depth = 4, shrinkage = 0.01)
 pred_boost <- (predict(webb_boost, webb_test, n.trees = 5000))^2
